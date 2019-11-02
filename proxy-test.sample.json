@@ -1,0 +1,5 @@
+{
+  "proxyURL": "http://host:port",
+  "proxyUsername": "username",
+  "proxyPassword": "password"
+}
