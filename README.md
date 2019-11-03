@@ -17,7 +17,10 @@ new TinyProxyChain({
   onRequest: (req, defaultProxyOptions) => {
       console.log(`${req.method} ${req.url} HTTP/${req.httpVersion}`)
   
-      if (req.url.includes('some-site')) {
+      if (req.headers.authorization !== TinyProxyChain.makeAuth('user', 'password')) {
+            req.socket.write(`HTTP/${req.httpVersion} 401 Unauthorized\r\n` +
+              `WWW-Authenticate: Basic\r\n`)
+      } else if (req.url.includes('some-site')) {
         return TinyProxyChain.makeProxyOptions('http://proxy2:port', 'username2', 'password2')
       } else {
         return defaultProxyOptions
