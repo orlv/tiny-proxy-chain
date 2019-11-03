@@ -29,15 +29,19 @@ class TinyProxyChain {
    * @returns {{proxyHost: string, proxyPort: number, proxyAuth: string}|null}
    */
   static makeProxyOptions (proxyURL, proxyUsername, proxyPassword) {
-    const { hostname, port } = new URL(proxyURL)
+    if (proxyURL) {
+      const { hostname, port } = new URL(proxyURL)
 
-    return hostname
-      ? {
-        proxyAuth: proxyUsername && proxyPassword ? TinyProxyChain.makeAuth(proxyUsername, proxyPassword) : '',
-        proxyHost: hostname,
-        proxyPort: port
-      }
-      : null
+      return hostname
+        ? {
+          proxyAuth: proxyUsername && proxyPassword ? TinyProxyChain.makeAuth(proxyUsername, proxyPassword) : '',
+          proxyHost: hostname,
+          proxyPort: port
+        }
+        : null
+    }
+
+    return null
   }
 
   /**
