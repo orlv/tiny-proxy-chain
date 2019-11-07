@@ -1,6 +1,7 @@
 'use strict'
 
 const http = require('http')
+const https = require('https')
 const net = require('net')
 
 class TinyProxyChain {
@@ -12,13 +13,18 @@ class TinyProxyChain {
    * @param {string} [proxyPassword]
    * @param {boolean} [debug=false]
    * @param {function} [onRequest]
+   * @param {string} [key] - ssl key
+   * @param {string} [cert] - ssl cert
    */
-  constructor ({ listenPort, proxyURL, proxyUsername, proxyPassword, debug = false, onRequest }) {
+  constructor ({ listenPort, proxyURL, proxyUsername, proxyPassword, debug = false, onRequest, key, cert }) {
     this.listenPort = listenPort
     this.defaultProxyOptions = TinyProxyChain.makeProxyOptions(proxyURL, proxyUsername, proxyPassword)
     this.debug = debug === true
     this.onRequest = onRequest ? onRequest : (req, opt) => opt
-    this.proxy = http.createServer(req => this.makeRequest(req, req.socket, null))
+    this.proxy = key && cert
+      ? https.createServer({ key, cert }, req => this.makeRequest(req, req.socket, null))
+      : http.createServer(req => this.makeRequest(req, req.socket, null))
+
     this.proxy.on('connect', this.makeRequest.bind(this))
   }
 
