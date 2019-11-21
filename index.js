@@ -26,6 +26,10 @@ class TinyProxyChain {
       : http.createServer(req => this.makeRequest(req, req.socket, null))
 
     this.proxy.on('connect', this.makeRequest.bind(this))
+
+    this.proxy.on('error', e =>
+      console.log(e)
+    )
   }
 
   /**
@@ -80,6 +84,21 @@ class TinyProxyChain {
   }
 
   makeRequest (req, clientSocket, head) {
+    let srvSocket = null
+    let alive = true
+
+    clientSocket.on('error', e => {
+      alive = false
+
+      if (srvSocket) {
+        srvSocket.end()
+      }
+
+      if (this.debug) {
+        console.error('->', e)
+      }
+    })
+
     if (this.debug) {
       console.log(`${req.method} ${req.url} HTTP/${req.httpVersion}`)
       console.log(JSON.stringify(req.headers, null, 2))
@@ -90,7 +109,7 @@ class TinyProxyChain {
     if (!proxyOptions) {
       req.socket.end()
     } else {
-      const srvSocket = net.connect(proxyOptions.proxyPort, proxyOptions.proxyHost, () => {
+      srvSocket = net.connect(proxyOptions.proxyPort, proxyOptions.proxyHost, () => {
         const httpRequest = `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n` +
           Object.keys(req.headers).map(header => `${header}: ${req.headers[header]}\r\n`).join('') +
           `Proxy-Authorization: ${proxyOptions.proxyAuth}\r\n\r\n`
@@ -122,13 +141,9 @@ class TinyProxyChain {
         }
       })
 
-      clientSocket.on('error', e => {
+      if (!alive) {
         srvSocket.end()
-
-        if (this.debug) {
-          console.error('->', e)
-        }
-      })
+      }
     }
   }
 }

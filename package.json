@@ -1,6 +1,6 @@
 {
   "name": "tiny-proxy-chain",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Proxy chain",
   "repository": "git@github.com:orlv/tiny-proxy-chain.git",
   "main": "index.js",
