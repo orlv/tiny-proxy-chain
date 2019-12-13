@@ -22,10 +22,10 @@ class TinyProxyChain {
     this.debug = debug === true
     this.onRequest = onRequest ? onRequest : (req, opt) => opt
     this.proxy = key && cert
-      ? https.createServer({ key, cert }, req => this.makeRequest(req, req.socket, null))
-      : http.createServer(req => this.makeRequest(req, req.socket, null))
+      ? https.createServer({ key, cert }, (req, res) => this.makeRequest(req, res))
+      : http.createServer((req, res) => this.makeRequest(req, res))
 
-    this.proxy.on('connect', this.makeRequest.bind(this))
+    this.proxy.on('connect', this.makeConnection.bind(this))
 
     this.proxy.on('error', e =>
       console.log(e)
@@ -83,7 +83,51 @@ class TinyProxyChain {
     return this
   }
 
-  makeRequest (req, clientSocket, head) {
+  makeRequest (req, res) {
+    const proxyOptions = this.onRequest(req, this.defaultProxyOptions)
+
+    if (!proxyOptions) {
+      res.end()
+    } else {
+      const headers = {
+        ...req.headers,
+        'Proxy-Authorization': proxyOptions.proxyAuth
+      }
+
+      const options = {
+        hostname: proxyOptions.proxyHost,
+        port: proxyOptions.proxyPort,
+        path: req.url,
+        method: req.method,
+        headers
+      }
+
+      const proxyReq = http.request(options)
+
+      req.pipe(proxyReq)
+
+      proxyReq.on('response', proxyRes => {
+        res.statusCode = proxyRes.statusCode
+
+        Object.keys(proxyRes.headers).forEach(key => {
+          res.setHeader(key, proxyRes.headers[key])
+        })
+
+        proxyRes.pipe(res)
+      })
+
+      proxyReq.on('error', e => {
+        res.statusCode = 500
+        res.end()
+
+        if (this.debug) {
+          console.error('<-', e)
+        }
+      })
+    }
+  }
+
+  makeConnection (req, clientSocket, head) {
     let srvSocket = null
     let alive = true
 
@@ -117,6 +161,8 @@ class TinyProxyChain {
         if (this.debug) {
           console.log(`\n${httpRequest}\n`)
         }
+
+        console.log('write', req.url)
 
         srvSocket.write(httpRequest)
 
