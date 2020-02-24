@@ -162,8 +162,6 @@ class TinyProxyChain {
           console.log(`\n${httpRequest}\n`)
         }
 
-        console.log('write', req.url)
-
         srvSocket.write(httpRequest)
 
         if (head && head.length > 0) {
