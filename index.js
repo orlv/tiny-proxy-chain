@@ -15,14 +15,15 @@ class TinyProxyChain {
    * @param {function} [onRequest]
    * @param {string} [key] - ssl key
    * @param {string} [cert] - ssl cert
+   * @param {string} [ca] - ssl cert
    */
-  constructor ({ listenPort, proxyURL, proxyUsername, proxyPassword, debug = false, onRequest, key, cert }) {
+  constructor ({ listenPort, proxyURL, proxyUsername, proxyPassword, debug = false, onRequest, key, cert, ca }) {
     this.listenPort = listenPort
     this.defaultProxyOptions = TinyProxyChain.makeProxyOptions(proxyURL, proxyUsername, proxyPassword)
     this.debug = debug === true
     this.onRequest = onRequest ? onRequest : (req, opt) => opt
-    this.proxy = key && cert
-      ? https.createServer({ key, cert }, (req, res) => this.makeRequest(req, res))
+    this.proxy = key && cert && ca
+      ? https.createServer({ key, cert, ca }, (req, res) => this.makeRequest(req, res))
       : http.createServer((req, res) => this.makeRequest(req, res))
 
     this.proxy.on('connect', this.makeConnection.bind(this))

@@ -16,6 +16,7 @@ new TinyProxyChain({
   debug: false,
   key: fs.readFileSync('./keys/privkey.pem'),
   cert: fs.readFileSync('./keys/cert.pem'),
+  ca: fs.readFileSync('./keys/chain.pem'),
   onRequest: (req, defaultProxyOptions) => {
     console.log(`${req.method} ${req.url} HTTP/${req.httpVersion}`)
   
