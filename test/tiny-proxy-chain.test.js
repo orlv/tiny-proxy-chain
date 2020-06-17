@@ -31,6 +31,7 @@ describe('Connection without proxy', () => {
 })
 
 describe('Connection via proxy', () => {
+  // TODO: socks proxy test
   const { hostname: host, port } = new URL(proxyURL)
   const headers = { 'Proxy-Authorization': 'Basic ' + Buffer.from(`${proxyUsername}:${proxyPassword}`).toString('base64') }
 

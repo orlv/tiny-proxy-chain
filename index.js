@@ -3,6 +3,8 @@
 const http = require('http')
 const https = require('https')
 const net = require('net')
+const SocksProxyAgent = require('socks-proxy-agent')
+const { SocksClient } = require('socks')
 
 class TinyProxyChain {
   /**
@@ -37,17 +39,24 @@ class TinyProxyChain {
    * @param {string} proxyURL
    * @param {string} [proxyUsername]
    * @param {string} [proxyPassword]
-   * @returns {{proxyHost: string, proxyPort: number, proxyAuth: string}|null}
+   * @returns {{proxyType: string, socksType: number, proxyURL: string, proxyHost: string, proxyPort: number, proxyAuth: string}|null}
    */
   static makeProxyOptions (proxyURL, proxyUsername, proxyPassword) {
     if (proxyURL) {
       const { hostname, port } = new URL(proxyURL)
 
+      const proxyType = /^socks/.test(proxyURL) ? 'socks' : 'http'
+
       return hostname
         ? {
+          proxyType,
+          socksType: proxyType === 'socks' ? /^socks5?:/.test(proxyURL) ? 5 : 4 : null,
           proxyAuth: proxyUsername && proxyPassword ? TinyProxyChain.makeAuth(proxyUsername, proxyPassword) : '',
+          proxyURL: proxyURL,
           proxyHost: hostname,
-          proxyPort: port
+          proxyPort: port,
+          proxyUsername,
+          proxyPassword
         }
         : null
     }
@@ -84,24 +93,44 @@ class TinyProxyChain {
     return this
   }
 
+  static makeSocksRequestOptions (proxyOptions, req) {
+    const { hostname, port, pathname } = new URL(req.url)
+    const headers = { ...req.headers }
+
+    delete headers['Proxy-Authorization']
+
+    return {
+      hostname,
+      port,
+      path: pathname,
+      method: req.method,
+      headers,
+      agent: new SocksProxyAgent(proxyOptions.proxyURL)
+    }
+  }
+
+  static makeHttpRequestOptions (proxyOptions, req) {
+    return {
+      hostname: proxyOptions.proxyHost,
+      port: proxyOptions.proxyPort,
+      path: req.url,
+      method: req.method,
+      headers: {
+        ...req.headers,
+        'Proxy-Authorization': proxyOptions.proxyAuth
+      }
+    }
+  }
+
   makeRequest (req, res) {
     const proxyOptions = this.onRequest(req, this.defaultProxyOptions)
 
     if (!proxyOptions) {
       res.end()
     } else {
-      const headers = {
-        ...req.headers,
-        'Proxy-Authorization': proxyOptions.proxyAuth
-      }
-
-      const options = {
-        hostname: proxyOptions.proxyHost,
-        port: proxyOptions.proxyPort,
-        path: req.url,
-        method: req.method,
-        headers
-      }
+      const options = proxyOptions.proxyType === 'socks'
+        ? TinyProxyChain.makeSocksRequestOptions(proxyOptions, req)
+        : TinyProxyChain.makeHttpRequestOptions(proxyOptions, req)
 
       const proxyReq = http.request(options)
 
@@ -128,7 +157,84 @@ class TinyProxyChain {
     }
   }
 
-  makeConnection (req, clientSocket, head) {
+  async makeSocksConnection (proxyOptions, req, clientSocket) {
+    const [host, port] = req.url.split(':')
+
+    const options = {
+      proxy: {
+        host: proxyOptions.proxyHost,
+        port: parseInt(proxyOptions.proxyPort),
+        type: proxyOptions.socksType, // 4 or 5
+        userId: proxyOptions.proxyUsername,
+        password: proxyOptions.proxyPassword
+      },
+
+      command: 'connect',
+
+      destination: {
+        host,
+        port: parseInt(port) || 80
+      }
+    }
+
+    const { socket: srvSocket } = await SocksClient.createConnection(options)
+
+    srvSocket.on('end', () => {
+      if (clientSocket.writable) {
+        clientSocket.end()
+      }
+    })
+
+    srvSocket.on('error', e => {
+      if (clientSocket.writable) {
+        clientSocket.write(`HTTP/${req.httpVersion} 500 Connection error\r\n\r\n`)
+        clientSocket.end()
+      }
+
+      if (this.debug) {
+        console.error('<-', e)
+      }
+    })
+
+    if (clientSocket.writable) {
+      clientSocket.write('HTTP/1.0 200 Connection established\r\n\r\n')
+    }
+
+    return srvSocket
+  }
+
+  async makeHTTPProxyConnection (proxyOptions, req, clientSocket) {
+    return new Promise(resolve => {
+      const srvSocket = net.connect(proxyOptions.proxyPort, proxyOptions.proxyHost, () => {
+        const httpRequest = `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n` +
+          Object.keys(req.headers).map(header => `${header}: ${req.headers[header]}\r\n`).join('') +
+          `Proxy-Authorization: ${proxyOptions.proxyAuth}\r\n\r\n`
+
+        if (this.debug) {
+          console.log(`\n${httpRequest}\n`)
+        }
+
+        srvSocket.write(httpRequest)
+
+        resolve(srvSocket)
+      })
+
+      srvSocket.on('end', () => {
+        clientSocket.end()
+      })
+
+      srvSocket.on('error', e => {
+        clientSocket.write(`HTTP/${req.httpVersion} 500 Connection error\r\n\r\n`)
+        clientSocket.end()
+
+        if (this.debug) {
+          console.error('<-', e)
+        }
+      })
+    })
+  }
+
+  async makeConnection (req, clientSocket, head) {
     let srvSocket = null
     let alive = true
 
@@ -152,42 +258,39 @@ class TinyProxyChain {
     const proxyOptions = this.onRequest(req, this.defaultProxyOptions)
 
     if (!proxyOptions) {
-      req.socket.end()
+      clientSocket.end()
     } else {
-      srvSocket = net.connect(proxyOptions.proxyPort, proxyOptions.proxyHost, () => {
-        const httpRequest = `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n` +
-          Object.keys(req.headers).map(header => `${header}: ${req.headers[header]}\r\n`).join('') +
-          `Proxy-Authorization: ${proxyOptions.proxyAuth}\r\n\r\n`
-
-        if (this.debug) {
-          console.log(`\n${httpRequest}\n`)
-        }
-
-        srvSocket.write(httpRequest)
+      try {
+        srvSocket = await (proxyOptions.proxyType === 'socks'
+          ? this.makeSocksConnection(proxyOptions, req, clientSocket)
+          : this.makeHTTPProxyConnection(proxyOptions, req, clientSocket))
 
         if (head && head.length > 0) {
           srvSocket.write(head)
         }
 
+        clientSocket.on('data', data => {
+          if (srvSocket.writable) {
+            srvSocket.write(data)
+          }
+        })
+
         srvSocket.pipe(clientSocket)
-        clientSocket.pipe(srvSocket)
-      })
 
-      srvSocket.on('end', () => {
-        clientSocket.end()
-      })
+        if (!alive) {
+          srvSocket.end()
+        }
+      } catch (e) {
+        if (this.debug) {
+          console.error('<-1', e)
+        }
 
-      srvSocket.on('error', e => {
         clientSocket.write(`HTTP/${req.httpVersion} 500 Connection error\r\n\r\n`)
         clientSocket.end()
 
-        if (this.debug) {
-          console.error('<-', e)
+        if (srvSocket) {
+          srvSocket.end()
         }
-      })
-
-      if (!alive) {
-        srvSocket.end()
       }
     }
   }

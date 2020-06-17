@@ -10,9 +10,13 @@
   "author": "Oleg Orlov",
   "license": "ISC",
   "devDependencies": {
-    "http-proxy-agent": "^2.1.0",
-    "https-proxy-agent": "^3.0.1",
-    "mocha": "^6.2.2",
+    "http-proxy-agent": "^4.0.1",
+    "https-proxy-agent": "^5.0.0",
+    "mocha": "^8.0.1",
     "node-fetch": "^2.6.0"
+  },
+  "dependencies": {
+    "socks": "^2.3.3",
+    "socks-proxy-agent": "^5.0.0"
   }
 }
