@@ -16,7 +16,7 @@
     "node-fetch": "^2.6.1"
   },
   "dependencies": {
-    "socks": "^2.6.0",
-    "socks-proxy-agent": "^5.0.0"
+    "socks": "^2.6.1",
+    "socks-proxy-agent": "^6.0.0"
   }
 }
