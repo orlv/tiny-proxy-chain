@@ -25,7 +25,7 @@ class TinyProxyChain {
    * @param {string} [params.proxyURL] - 'socks://127.0.0.1:8081'
    * @param {string} [params.proxyUsername]
    * @param {string} [params.proxyPassword]
-   * @param {number} [params.debug=false]
+   * @param {number} [params.debug=0]
    * @param {function} [params.onRequest]
    * @param {string} [params.key] - ssl key
    * @param {string} [params.cert] - ssl cert
@@ -37,7 +37,7 @@ class TinyProxyChain {
     proxyURL,
     proxyUsername,
     proxyPassword,
-    debug = false,
+    debug = 0,
     onRequest,
     key,
     cert,
@@ -51,7 +51,7 @@ class TinyProxyChain {
     this.defaultProxyOptions = TinyProxyChain.makeProxyOptions(proxyURL, proxyUsername, proxyPassword)
 
     /** @type {number} */
-    this.debug = debug
+    this.debug = typeof debug === 'number' ? debug : !!debug ? 3 : 0
 
     /** @type {Function} */
     this.onRequest = onRequest ? onRequest : (req, opt) => opt
@@ -66,6 +66,11 @@ class TinyProxyChain {
 
     this.proxy.on('connect', this.makeConnection.bind(this))
     this.proxy.on('error', e => console.log(e))
+
+    if (this.debug > 0) {
+      this.lastId = 0
+      this.connections = new Map()
+    }
   }
 
   /**
@@ -113,7 +118,7 @@ class TinyProxyChain {
     if (!this.proxy.listening) {
       this.proxy.listen(this.listenPort)
 
-      if (this.debug) {
+      if (this.debug > 0) {
         console.log(`TCP server accepting connection on port: ${this.listenPort}`)
       }
     }
@@ -203,7 +208,7 @@ class TinyProxyChain {
         res.statusCode = 500
         res.end()
 
-        if (this.debug) {
+        if (this.debug > 2) {
           console.error('<-', e)
         }
       })
@@ -250,7 +255,7 @@ class TinyProxyChain {
         clientSocket.end()
       }
 
-      if (this.debug) {
+      if (this.debug > 2) {
         console.error('<-', e)
       }
     })
@@ -275,7 +280,7 @@ class TinyProxyChain {
           Object.keys(req.headers).map(header => `${header}: ${req.headers[header]}\r\n`).join('') +
           `Proxy-Authorization: ${proxyOptions.proxyAuth}\r\n\r\n`
 
-        if (this.debug) {
+        if (this.debug > 2) {
           console.log(`\n${httpRequest}\n`)
         }
 
@@ -292,7 +297,7 @@ class TinyProxyChain {
         clientSocket.write(`HTTP/${req.httpVersion} 500 Connection error\r\n\r\n`)
         clientSocket.end()
 
-        if (this.debug) {
+        if (this.debug > 2) {
           console.error('<-', e)
         }
       })
@@ -312,7 +317,7 @@ class TinyProxyChain {
     if (this.connectionTimeout) {
       clientSocket.setTimeout(this.connectionTimeout)
       clientSocket.on('timeout', () => {
-        if (this.debug) {
+        if (this.debug > 1) {
           console.log(`Stream timeout ${req.url}`)
         }
 
@@ -327,14 +332,16 @@ class TinyProxyChain {
         srvSocket.end()
       }
 
-      if (this.debug) {
+      if (this.debug > 2) {
         console.error('->', e)
       }
     })
 
-    if (this.debug) {
-      console.log(`${req.method} ${req.url} HTTP/${req.httpVersion}`)
-      console.log(JSON.stringify(req.headers, null, 2))
+    if (this.debug > 0) {
+      const id = this.lastId++
+
+      this.addReq(id, req)
+      clientSocket.once('close', () => this.rmReq(id))
     }
 
     const proxyOptions = this.onRequest(req, this.defaultProxyOptions)
@@ -369,7 +376,7 @@ class TinyProxyChain {
           srvSocket.end()
         }
       } catch (e) {
-        if (this.debug) {
+        if (this.debug > 2) {
           console.error('<-1', e)
         }
 
@@ -381,6 +388,41 @@ class TinyProxyChain {
         }
       }
     }
+  }
+
+  /**
+   * @param {number} id
+   * @param {http.IncomingMessage} req
+   */
+  addReq (id, req) {
+    if (this.debug > 1) {
+      console.log(`#${id} ${req.method} ${req.url}`)
+    }
+
+    if (!this.connections.has(id)) {
+      this.connections.set(id, { id, url: req.url })
+    }
+
+    console.log(`Connections: ${this.connections.size}`)
+  }
+
+  /**
+   * @param {number} id
+   */
+  rmReq (id) {
+    if (this.connections.has(id)) {
+      if (this.debug > 1) {
+        const data = this.connections.get(id)
+
+        console.log(`#${id} closed ${data.url}`)
+      }
+
+      this.connections.delete(id)
+    } else {
+      console.error(`Already deleted #${id}`)
+    }
+
+    console.log(`Connections: ${this.connections.size}`)
   }
 }
 
