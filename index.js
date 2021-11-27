@@ -30,6 +30,7 @@ class TinyProxyChain {
    * @param {string} [params.key] - ssl key
    * @param {string} [params.cert] - ssl cert
    * @param {string} [params.ca] - ssl cert
+   * @param {?number} [params.connectionTimeout] - close inactive socket
    */
   constructor ({
     listenPort,
@@ -40,7 +41,8 @@ class TinyProxyChain {
     onRequest,
     key,
     cert,
-    ca
+    ca,
+    connectionTimeout = null
   }) {
     /** @type {number} */
     this.listenPort = listenPort
@@ -53,6 +55,9 @@ class TinyProxyChain {
 
     /** @type {Function} */
     this.onRequest = onRequest ? onRequest : (req, opt) => opt
+
+    /** @type {?number} */
+    this.connectionTimeout = connectionTimeout
 
     /** @type {http.Server} */
     this.proxy = key && cert && ca
@@ -304,6 +309,17 @@ class TinyProxyChain {
     let srvSocket = null
     let alive = true
 
+    if (this.connectionTimeout) {
+      clientSocket.setTimeout(this.connectionTimeout)
+      clientSocket.on('timeout', () => {
+        if (this.debug) {
+          console.log(`Stream timeout ${req.url}`)
+        }
+
+        clientSocket.end()
+      })
+    }
+
     clientSocket.on('error', e => {
       alive = false
 
@@ -330,6 +346,12 @@ class TinyProxyChain {
         srvSocket = await (proxyOptions.proxyType === 'socks'
           ? this.makeSocksConnection(proxyOptions, req, clientSocket)
           : this.makeHTTPProxyConnection(proxyOptions, req, clientSocket))
+
+        srvSocket.once('close', () => {
+          if (!clientSocket.destroyed) {
+            clientSocket.end()
+          }
+        })
 
         if (head && head.length > 0) {
           srvSocket.write(head)
