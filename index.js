@@ -6,40 +6,68 @@ const net = require('net')
 const SocksProxyAgent = require('socks-proxy-agent')
 const { SocksClient } = require('socks')
 
+/**
+ * @typedef {object} TinyProxyOptions
+ * @property {string} proxyType - 'socks', 'http'
+ * @property {?number} socksType - null, 4, 5
+ * @property {string} proxyAuth - basic auth
+ * @property {string} proxyURL
+ * @property {string} proxyHost
+ * @property {string} proxyPort
+ * @property {string} proxyUsername
+ * @property {string} proxyPassword
+ */
+
 class TinyProxyChain {
   /**
-   * TinyProxyChain
-   * @param {number} listenPort
-   * @param {string} [proxyURL] - 'http://127.0.0.1:8080'
-   * @param {string} [proxyUsername]
-   * @param {string} [proxyPassword]
-   * @param {boolean} [debug=false]
-   * @param {function} [onRequest]
-   * @param {string} [key] - ssl key
-   * @param {string} [cert] - ssl cert
-   * @param {string} [ca] - ssl cert
+   * @param {object} params
+   * @param {number} params.listenPort
+   * @param {string} [params.proxyURL] - 'socks://127.0.0.1:8081'
+   * @param {string} [params.proxyUsername]
+   * @param {string} [params.proxyPassword]
+   * @param {number} [params.debug=false]
+   * @param {function} [params.onRequest]
+   * @param {string} [params.key] - ssl key
+   * @param {string} [params.cert] - ssl cert
+   * @param {string} [params.ca] - ssl cert
    */
-  constructor ({ listenPort, proxyURL, proxyUsername, proxyPassword, debug = false, onRequest, key, cert, ca }) {
+  constructor ({
+    listenPort,
+    proxyURL,
+    proxyUsername,
+    proxyPassword,
+    debug = false,
+    onRequest,
+    key,
+    cert,
+    ca
+  }) {
+    /** @type {number} */
     this.listenPort = listenPort
+
+    /** @type {?TinyProxyOptions} */
     this.defaultProxyOptions = TinyProxyChain.makeProxyOptions(proxyURL, proxyUsername, proxyPassword)
-    this.debug = debug === true
+
+    /** @type {number} */
+    this.debug = debug
+
+    /** @type {Function} */
     this.onRequest = onRequest ? onRequest : (req, opt) => opt
+
+    /** @type {http.Server} */
     this.proxy = key && cert && ca
       ? https.createServer({ key, cert, ca }, (req, res) => this.makeRequest(req, res))
       : http.createServer((req, res) => this.makeRequest(req, res))
 
     this.proxy.on('connect', this.makeConnection.bind(this))
-
-    this.proxy.on('error', e =>
-      console.log(e)
-    )
+    this.proxy.on('error', e => console.log(e))
   }
 
   /**
    * @param {string} proxyURL
    * @param {string} [proxyUsername]
    * @param {string} [proxyPassword]
-   * @returns {{proxyType: string, socksType: number, proxyURL: string, proxyHost: string, proxyPort: number, proxyAuth: string}|null}
+   * @returns {?TinyProxyOptions}
    */
   static makeProxyOptions (proxyURL, proxyUsername, proxyPassword) {
     if (proxyURL) {
@@ -73,6 +101,9 @@ class TinyProxyChain {
     return 'Basic ' + Buffer.from(`${proxyUsername}:${proxyPassword}`).toString('base64')
   }
 
+  /**
+   * @return {TinyProxyChain}
+   */
   listen () {
     if (!this.proxy.listening) {
       this.proxy.listen(this.listenPort)
@@ -85,6 +116,9 @@ class TinyProxyChain {
     return this
   }
 
+  /**
+   * @return {TinyProxyChain}
+   */
   close () {
     if (this.proxy.listening) {
       this.proxy.close()
@@ -93,6 +127,11 @@ class TinyProxyChain {
     return this
   }
 
+  /**
+   * @param {TinyProxyOptions} proxyOptions
+   * @param {http.IncomingMessage} req
+   * @return {{hostname: string, port: string, path: string, method: string, headers: object, agent: SocksProxyAgent}}
+   */
   static makeSocksRequestOptions (proxyOptions, req) {
     const { hostname, port, pathname } = new URL(req.url)
     const headers = { ...req.headers }
@@ -109,6 +148,11 @@ class TinyProxyChain {
     }
   }
 
+  /**
+   * @param {TinyProxyOptions} proxyOptions
+   * @param {http.IncomingMessage} req
+   * @return {{hostname: string, port: string, path: string, method: string, headers: object}}
+   */
   static makeHttpRequestOptions (proxyOptions, req) {
     return {
       hostname: proxyOptions.proxyHost,
@@ -122,6 +166,10 @@ class TinyProxyChain {
     }
   }
 
+  /**
+   * @param {http.IncomingMessage} req
+   * @param {http.ServerResponse} res
+   */
   makeRequest (req, res) {
     const proxyOptions = this.onRequest(req, this.defaultProxyOptions)
 
@@ -157,6 +205,12 @@ class TinyProxyChain {
     }
   }
 
+  /**
+   * @param {object} proxyOptions
+   * @param {http.IncomingMessage} req
+   * @param {stream.Duplex} clientSocket
+   * @return {Promise<net.Socket>}
+   */
   async makeSocksConnection (proxyOptions, req, clientSocket) {
     const [host, port] = req.url.split(':')
 
@@ -203,6 +257,12 @@ class TinyProxyChain {
     return srvSocket
   }
 
+  /**
+   * @param {object} proxyOptions
+   * @param {http.IncomingMessage} req
+   * @param {stream.Duplex} clientSocket
+   * @return {Promise<net.Socket>}
+   */
   async makeHTTPProxyConnection (proxyOptions, req, clientSocket) {
     return new Promise(resolve => {
       const srvSocket = net.connect(proxyOptions.proxyPort, proxyOptions.proxyHost, () => {
@@ -234,6 +294,12 @@ class TinyProxyChain {
     })
   }
 
+  /**
+   * @param {http.IncomingMessage} req
+   * @param {stream.Duplex} clientSocket
+   * @param {Buffer} head
+   * @return {Promise}
+   */
   async makeConnection (req, clientSocket, head) {
     let srvSocket = null
     let alive = true
