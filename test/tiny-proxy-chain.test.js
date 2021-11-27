@@ -6,6 +6,7 @@ const fetch = require('node-fetch')
 const { proxyURL, proxyUsername, proxyPassword } = require('../proxy-test.json')
 const HttpsProxyAgent = require('https-proxy-agent')
 const HttpProxyAgent = require('http-proxy-agent')
+const SocksProxyAgent = require('socks-proxy-agent')
 const TinyProxyChain = require('../index.js')
 
 describe('Connection without proxy', () => {
@@ -33,10 +34,15 @@ describe('Connection without proxy', () => {
 describe('Connection via proxy', () => {
   // TODO: socks proxy test
   const { hostname: host, port } = new URL(proxyURL)
-  const headers = { 'Proxy-Authorization': 'Basic ' + Buffer.from(`${proxyUsername}:${proxyPassword}`).toString('base64') }
+  const headers = proxyUsername && proxyPassword
+    ? { 'Proxy-Authorization': 'Basic ' + Buffer.from(`${proxyUsername}:${proxyPassword}`).toString('base64') }
+    : undefined
+  const proxyType = /^socks/.test(proxyURL) ? 'socks' : 'http'
 
   it(`http://example.com`, async () => {
-    const agent = new HttpProxyAgent({ host, port })
+    const agent = proxyType === 'http'
+      ? new HttpProxyAgent({ host, port })
+      : new SocksProxyAgent(proxyURL)
     const res = await fetch('http://example.com', { agent, headers })
 
     assert(res.status === 200, `Status: ${res.status}`)
@@ -47,7 +53,10 @@ describe('Connection via proxy', () => {
   })
 
   it(`https://example.com`, async () => {
-    const agent = new HttpsProxyAgent({ host, port, headers })
+    const agent = proxyType === 'http'
+      ? new HttpProxyAgent({ host, port, headers })
+      : new SocksProxyAgent(proxyURL)
+
     const res = await fetch('https://example.com', { agent })
 
     assert(res.status === 200, `Status: ${res.status}`)
