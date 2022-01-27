@@ -194,7 +194,7 @@ class TinyProxyChain {
 
       req.pipe(proxyReq)
 
-      proxyReq.on('response', proxyRes => {
+      proxyReq.once('response', proxyRes => {
         res.statusCode = proxyRes.statusCode
 
         Object.keys(proxyRes.headers).forEach(key => {
@@ -204,7 +204,7 @@ class TinyProxyChain {
         proxyRes.pipe(res)
       })
 
-      proxyReq.on('error', e => {
+      proxyReq.once('error', e => {
         res.statusCode = 500
         res.end()
 
@@ -243,13 +243,13 @@ class TinyProxyChain {
 
     const { socket: srvSocket } = await SocksClient.createConnection(options)
 
-    srvSocket.on('end', () => {
+    srvSocket.once('end', () => {
       if (clientSocket.writable) {
         clientSocket.end()
       }
     })
 
-    srvSocket.on('error', e => {
+    srvSocket.once('error', e => {
       if (clientSocket.writable) {
         clientSocket.write(`HTTP/${req.httpVersion} 500 Connection error\r\n\r\n`)
         clientSocket.end()
@@ -289,11 +289,11 @@ class TinyProxyChain {
         resolve(srvSocket)
       })
 
-      srvSocket.on('end', () => {
+      srvSocket.once('end', () => {
         clientSocket.end()
       })
 
-      srvSocket.on('error', e => {
+      srvSocket.once('error', e => {
         clientSocket.write(`HTTP/${req.httpVersion} 500 Connection error\r\n\r\n`)
         clientSocket.end()
 
@@ -316,7 +316,7 @@ class TinyProxyChain {
 
     if (this.connectionTimeout) {
       clientSocket.setTimeout(this.connectionTimeout)
-      clientSocket.on('timeout', () => {
+      clientSocket.once('timeout', () => {
         if (this.debug > 1) {
           console.log(`Stream timeout ${req.url}`)
         }
@@ -325,7 +325,7 @@ class TinyProxyChain {
       })
     }
 
-    clientSocket.on('error', e => {
+    clientSocket.once('error', e => {
       alive = false
 
       if (srvSocket) {
