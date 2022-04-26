@@ -6,7 +6,7 @@ const fetch = require('node-fetch')
 const { proxyURL, proxyUsername, proxyPassword } = require('../proxy-test.json')
 const HttpsProxyAgent = require('https-proxy-agent')
 const HttpProxyAgent = require('http-proxy-agent')
-const SocksProxyAgent = require('socks-proxy-agent')
+const { SocksProxyAgent } = require('socks-proxy-agent')
 const TinyProxyChain = require('../index.js')
 
 describe('Connection without proxy', () => {
