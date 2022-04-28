@@ -3,7 +3,7 @@
 const http = require('http')
 const https = require('https')
 const net = require('net')
-const SocksProxyAgent = require('socks-proxy-agent')
+const { SocksProxyAgent } = require('socks-proxy-agent')
 const { SocksClient } = require('socks')
 
 /**
