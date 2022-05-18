@@ -4,6 +4,7 @@
   "description": "Proxy chain",
   "repository": "git@github.com:orlv/tiny-proxy-chain.git",
   "main": "index.js",
+  "typings": "index.d.ts",
   "scripts": {
     "test": "mocha"
   },
