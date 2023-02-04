@@ -2,7 +2,6 @@
 /* eslint-env mocha */
 
 const assert = require('assert')
-const fetch = require('node-fetch')
 const { proxyURL, proxyUsername, proxyPassword } = require('../proxy-test.json')
 const HttpsProxyAgent = require('https-proxy-agent')
 const HttpProxyAgent = require('http-proxy-agent')
