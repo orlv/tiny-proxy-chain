@@ -199,6 +199,7 @@ class TinyProxyChain {
             console.error(`req.pipe() error '${e.message}'`)
           }
 
+          proxyReq.end()
           res.statusCode = 500
           res.end()
         })
@@ -208,6 +209,7 @@ class TinyProxyChain {
           console.error(`req.on() error '${e.message}'`)
         }
 
+        proxyReq.end()
         res.statusCode = 500
         res.end()
       })
@@ -226,18 +228,20 @@ class TinyProxyChain {
               console.error(`proxyRes.pipe() error '${e.message}'`)
             }
 
+            proxyReq.end()
             res.statusCode = 500
             res.end()
           })
       })
 
       proxyReq.on('error', e => {
-        res.statusCode = 500
-        res.end()
-
         if (this.debug > 2) {
           console.error('<-', e)
         }
+
+        proxyReq.end()
+        res.statusCode = 500
+        res.end()
       })
     }
   }
@@ -271,16 +275,16 @@ class TinyProxyChain {
     const { socket: srvSocket } = await SocksClient.createConnection(options)
 
     srvSocket.once('end', () => {
-      if (clientSocket.writable) {
-        clientSocket.end()
-      }
+      clientSocket.end()
     })
 
     srvSocket.on('error', e => {
       if (clientSocket.writable) {
         clientSocket.write(`HTTP/${req.httpVersion} 500 Connection error\r\n\r\n`)
-        clientSocket.end()
       }
+
+      clientSocket.end()
+      srvSocket.end()
 
       if (this.debug > 2) {
         console.error('<-', e)
@@ -311,7 +315,9 @@ class TinyProxyChain {
           console.log(`\n${httpRequest}\n`)
         }
 
-        srvSocket.write(httpRequest)
+        if (srvSocket.writable) {
+          srvSocket.write(httpRequest)
+        }
 
         srvSocket.on('error', e => {
           if (this.debug > 1) {
@@ -339,7 +345,10 @@ class TinyProxyChain {
       })
 
       srvSocket.on('error', e => {
-        clientSocket.write(`HTTP/${req.httpVersion} 500 Connection error\r\n\r\n`)
+        if (clientSocket.writable) {
+          clientSocket.write(`HTTP/${req.httpVersion} 500 Connection error\r\n\r\n`)
+        }
+
         clientSocket.end()
         srvSocket.end()
 
@@ -368,11 +377,7 @@ class TinyProxyChain {
         }
 
         if (srvSocket) {
-          if (this.debug > 1) {
-            console.log(`Close server socket by Client socket timeout ${req.url}`)
-          }
-
-          srvSocket.end() // close server socket
+          srvSocket.end()
         }
 
         clientSocket.end()
@@ -385,6 +390,8 @@ class TinyProxyChain {
       if (srvSocket) {
         srvSocket.end()
       }
+
+      clientSocket.end()
 
       if (this.debug > 2) {
         console.error('->', e)
@@ -409,13 +416,17 @@ class TinyProxyChain {
           : this.makeHTTPProxyConnection(proxyOptions, req, clientSocket))
 
         srvSocket.once('close', () => {
-          if (!clientSocket.destroyed) {
-            clientSocket.end()
-          }
+          clientSocket.end()
+        })
+
+        clientSocket.once('close', () => {
+          srvSocket.end()
         })
 
         if (head && head.length > 0) {
-          srvSocket.write(head)
+          if (srvSocket.writable) {
+            srvSocket.write(head)
+          }
         }
 
         clientSocket.on('data', data => {
@@ -424,18 +435,28 @@ class TinyProxyChain {
           }
         })
 
-        srvSocket
-          .pipe(clientSocket)
-          .on('error', e => {
-            if (this.debug > 1) {
-              console.error(`srvSocket.pipe() error '${e.message}'`)
-            }
+        if (clientSocket.writable && srvSocket.writable) {
+          srvSocket
+            .pipe(clientSocket)
+            .on('error', e => {
+              if (this.debug > 1) {
+                console.error(`srvSocket.pipe() error '${e.message}'`)
+              }
 
-            alive = false
-            srvSocket.end()
-            clientSocket.write(`HTTP/${req.httpVersion} 500 Connection error\r\n\r\n`)
-            clientSocket.end()
-          })
+              alive = false
+
+              srvSocket.end()
+
+              if (clientSocket.writable) {
+                clientSocket.write(`HTTP/${req.httpVersion} 500 Connection error\r\n\r\n`)
+              }
+
+              clientSocket.end()
+            })
+        } else {
+          clientSocket.end()
+          srvSocket.end()
+        }
 
         if (!alive) {
           srvSocket.end()
@@ -445,7 +466,10 @@ class TinyProxyChain {
           console.error('<-1', e)
         }
 
-        clientSocket.write(`HTTP/${req.httpVersion} 500 Connection error\r\n\r\n`)
+        if (clientSocket.writable) {
+          clientSocket.write(`HTTP/${req.httpVersion} 500 Connection error\r\n\r\n`)
+        }
+
         clientSocket.end()
 
         if (srvSocket) {
