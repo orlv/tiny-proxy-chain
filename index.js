@@ -367,6 +367,14 @@ class TinyProxyChain {
           console.log(`Stream timeout ${req.url}`)
         }
 
+        if (srvSocket) {
+          if (this.debug > 1) {
+            console.log(`Close server socket by Client socket timeout ${req.url}`)
+          }
+
+          srvSocket.end() // close server socket
+        }
+
         clientSocket.end()
       })
     }
