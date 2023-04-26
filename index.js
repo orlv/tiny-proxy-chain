@@ -81,7 +81,12 @@ class TinyProxyChain {
    */
   static makeProxyOptions (proxyURL, proxyUsername, proxyPassword) {
     if (proxyURL) {
-      const { hostname, port } = new URL(proxyURL)
+      const { hostname: inputHostname, port } = new URL(proxyURL)
+
+      // for ipv6 proxy
+      const hostname = typeof inputHostname === 'string' && /^\[.*\]$/.test(inputHostname) && net.isIPv6(inputHostname.slice(1, -1))
+        ? inputHostname.slice(1, -1)
+        : inputHostname
 
       const proxyType = /^socks/.test(proxyURL) ? 'socks' : 'http'
 
