@@ -3,8 +3,8 @@
 
 const assert = require('assert')
 const { proxyURL, proxyUsername, proxyPassword } = require('../proxy-test.json')
-const HttpsProxyAgent = require('https-proxy-agent')
-const HttpProxyAgent = require('http-proxy-agent')
+const { HttpsProxyAgent } = require('https-proxy-agent')
+const { HttpProxyAgent } = require('http-proxy-agent')
 const { SocksProxyAgent } = require('socks-proxy-agent')
 const TinyProxyChain = require('../index.js')
 
