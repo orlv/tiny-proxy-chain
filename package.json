@@ -10,8 +10,8 @@
   "author": "Oleg Orlov",
   "license": "ISC",
   "devDependencies": {
-    "http-proxy-agent": "^6.0.1",
-    "https-proxy-agent": "^6.1.0",
+    "http-proxy-agent": "^7.0.0",
+    "https-proxy-agent": "^7.0.0",
     "mocha": "^10.2.0"
   },
   "dependencies": {
