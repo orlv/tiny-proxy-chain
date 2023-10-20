@@ -11,11 +11,11 @@
   "license": "ISC",
   "devDependencies": {
     "http-proxy-agent": "^7.0.0",
-    "https-proxy-agent": "^7.0.0",
+    "https-proxy-agent": "^7.0.2",
     "mocha": "^10.2.0"
   },
   "dependencies": {
     "socks": "^2.7.1",
-    "socks-proxy-agent": "^8.0.1"
+    "socks-proxy-agent": "^8.0.2"
   }
 }
